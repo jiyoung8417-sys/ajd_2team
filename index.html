@@ -19,18 +19,24 @@
 <script type="text/babel">
 const { useState, useMemo, useEffect } = React;
 
-const MAIN_OPTIONS = ["보험", "오프라인", "CS", "핀테크", "다나와", "사운본", "B2B"];
-const SUB_OPTIONS = ["없음", "미팅자동화", "환급서비스", "HR온보딩"];
+const CAT_OPTIONS = ["보험", "오프라인", "CS", "핀테크", "다나와", "사운본", "기타"];
+const ASSIGNEE_OPTIONS = ["백성재", "임서정", "김도윤"];
 
-const MAIN_COLORS = {
+const CAT_COLORS = {
   "보험": "bg-rose-50 text-rose-700 ring-rose-200",
   "오프라인": "bg-orange-50 text-orange-700 ring-orange-200",
   "CS": "bg-violet-50 text-violet-700 ring-violet-200",
   "핀테크": "bg-cyan-50 text-cyan-700 ring-cyan-200",
   "다나와": "bg-emerald-50 text-emerald-700 ring-emerald-200",
   "사운본": "bg-amber-50 text-amber-700 ring-amber-200",
-  "B2B": "bg-sky-50 text-sky-700 ring-sky-200",
+  "기타": "bg-slate-100 text-slate-600 ring-slate-200",
 };
+const CAT_BAR = {
+  "보험": "bg-rose-400", "오프라인": "bg-orange-400", "CS": "bg-violet-400",
+  "핀테크": "bg-cyan-400", "다나와": "bg-emerald-400", "사운본": "bg-amber-400", "기타": "bg-slate-400",
+};
+const catColor = (c) => CAT_COLORS[c] || "bg-slate-100 text-slate-600 ring-slate-200";
+const catBar = (c) => CAT_BAR[c] || "bg-slate-400";
 
 const COLUMNS = [
   { key: "todo", label: "시작 전", dot: "bg-slate-300" },
@@ -38,35 +44,44 @@ const COLUMNS = [
   { key: "stuck", label: "막힘", dot: "bg-red-500" },
   { key: "done", label: "완료", dot: "bg-emerald-500" },
 ];
+const STATUS_BORDER = { todo: "border-l-slate-300", doing: "border-l-blue-400", stuck: "border-l-red-400", done: "border-l-emerald-400" };
 
-// 문서 기반 시드 데이터
 const SEED = [
-  { id: 1, title: "CSO 업무 관리 (PM)", main: "CS", sub: "없음", assignee: "임서정", due: "06.01", status: "doing", before: "", after: "", progress: 50, reason: "", note: "CSO 업무 452개 정리 완료. 진행상황·우선순위는 CS 내부 구성원과 함께 정리 필요." },
-  { id: 2, title: "CS 채팅방 효율화", main: "CS", sub: "없음", assignee: "임서정", due: "—", status: "doing", before: "", after: "", progress: 40, reason: "", note: "야간근무: 대시보드 기획만 남음 / 센터장·파트장 보고: 정리 중. (황치훈 실장 회신 지연)" },
-  { id: 3, title: "CS 인센티브 계산 자동화", main: "CS", sub: "없음", assignee: "임서정", due: "06.10", status: "doing", before: "", after: "", progress: 85, reason: "", note: "FAQ 자동응답 봇 세팅만 남음. 6/10 개발 방식 논의 예정 (예상 2시간)." },
-  { id: 4, title: "CS 교육 자동화 (상담 시뮬레이터)", main: "CS", sub: "없음", assignee: "임서정", due: "—", status: "doing", before: "", after: "", progress: 35, reason: "", note: "AI 상담 시뮬레이터로 신입 사전 교육. CCO·교육팀 컨펌 하 개발 중." },
+  // 기존 업무 (문서 기반)
+  { id: 1, title: "CSO 업무 관리 (PM)", cat: "CS", assignee: "임서정", status: "doing", before: "", after: "", progress: 50, reason: "", note: "CSO 업무 452개 정리 완료. 진행상황·우선순위는 CS 내부 구성원과 함께 정리 필요." },
+  { id: 2, title: "CS 채팅방 효율화", cat: "CS", assignee: "임서정", status: "doing", before: "", after: "", progress: 40, reason: "", note: "야간근무: 대시보드 기획만 남음 / 센터장·파트장 보고: 정리 중." },
+  { id: 3, title: "CS 인센티브 계산 자동화", cat: "CS", assignee: "임서정", status: "doing", before: "", after: "", progress: 85, reason: "", note: "FAQ 자동응답 봇 세팅만 남음. 6/10 개발 방식 논의 예정." },
+  { id: 4, title: "CS 교육 자동화 (상담 시뮬레이터)", cat: "CS", assignee: "임서정", status: "doing", before: "", after: "", progress: 35, reason: "", note: "AI 상담 시뮬레이터로 신입 사전 교육. CCO·교육팀 컨펌 하 개발 중." },
+  { id: 5, title: "크로스셀링 — 상조 킥오프", cat: "오프라인", assignee: "임서정", status: "stuck", before: "", after: "", progress: 10, reason: "CMO·상조·오프라인 3자 킥오프 미진행 (주최자 부재), 인수인계 담당 없음", note: "가이드 교육은 완료." },
+  { id: 6, title: "크로스셀링 — 보험", cat: "오프라인", assignee: "임서정", status: "doing", before: "", after: "", progress: 30, reason: "", note: "유전자키트 유입-상담-접수 대시보드 세팅 완료. 이후 활동 보류." },
+  { id: 7, title: "CRM 만족도조사 자동발송 (아정스토어)", cat: "오프라인", assignee: "임서정", status: "stuck", before: "", after: "", progress: 30, reason: "CRM 개발 지연으로 대기", note: "자동발송 확인 게시판 신청 완료." },
+  { id: 8, title: "오프라인 '매장관리' → CRM 통합", cat: "오프라인", assignee: "임서정", status: "doing", before: "", after: "", progress: 25, reason: "", note: "매장관리 대시보드 CRM 연동 기획 / 크로스셀링 슬랙 세팅." },
+  { id: 9, title: "오프라인 CCTV 설치", cat: "오프라인", assignee: "임서정", status: "stuck", before: "", after: "", progress: 5, reason: "업체 견적 과다 — 네고 불가, 대안 업체 필요", note: "실제 인입량 트래킹용." },
+  { id: 10, title: "모바일 정책 자동화", cat: "사운본", assignee: "", status: "doing", before: 150, after: "", progress: 50, reason: "", note: "담당: 신충호. 상부점 정책 원페이지 자동 업데이트." },
+  { id: 11, title: "인터넷&유심 정책 자동화", cat: "사운본", assignee: "", status: "doing", before: 150, after: "", progress: 15, reason: "", note: "담당: 김은지. 정책팀 이관 검토 중." },
+  { id: 12, title: "센터장 판매마진평균 계산 자동화", cat: "사운본", assignee: "", status: "doing", before: 30, after: "", progress: 20, reason: "", note: "담당: 김은지. 데일리 마진평균 계산·전달." },
+  { id: 13, title: "G마켓 입점 준비", cat: "기타", assignee: "", status: "doing", before: "", after: "", progress: 20, reason: "", note: "담당: 심현우 주도. (구 B2B) 세팅 후 외부 업체 미팅 예정." },
 
-  { id: 5, title: "크로스셀링 — 상조 킥오프", main: "오프라인", sub: "없음", assignee: "임서정", due: "—", status: "stuck", before: "", after: "", progress: 10, reason: "CMO·상조·오프라인 3자 킥오프 미진행 (주최자 부재), 인수인계 담당 없음", note: "가이드 교육은 완료. 마케팅 조직과 미소통 상태." },
-  { id: 6, title: "크로스셀링 — 보험", main: "오프라인", sub: "없음", assignee: "임서정", due: "—", status: "doing", before: "", after: "", progress: 30, reason: "", note: "유전자키트 유입-상담-접수 대시보드 세팅 완료. 이후 활동 보류." },
-  { id: 7, title: "CRM 만족도조사 자동발송 (아정스토어)", main: "오프라인", sub: "없음", assignee: "임서정", due: "—", status: "stuck", before: "", after: "", progress: 30, reason: "CRM 개발 지연으로 대기", note: "자동발송 확인 게시판 신청 완료. 아정스토어 한정." },
-  { id: 8, title: "오프라인 '매장관리' → CRM 통합", main: "오프라인", sub: "없음", assignee: "임서정", due: "—", status: "doing", before: "", after: "", progress: 25, reason: "", note: "매장관리 대시보드 CRM 연동 기획 / 크로스셀링 슬랙 세팅 / 매장·직원별 트래킹. (오프라인 관리 인력 부재)" },
-  { id: 9, title: "오프라인 CCTV 설치", main: "오프라인", sub: "없음", assignee: "임서정", due: "—", status: "stuck", before: "", after: "", progress: 5, reason: "업체 견적 과다 — 네고 불가, 대안 업체 필요", note: "실제 인입량 트래킹용." },
+  // 신규 — 시작 전
+  { id: 14, title: "GA 랜딩페이지", cat: "보험", assignee: "", status: "todo", before: "", after: "", progress: 0, reason: "", note: "" },
+  { id: 15, title: "유튜브 영상광고", cat: "보험", assignee: "", status: "todo", before: "", after: "", progress: 0, reason: "", note: "" },
+  { id: 16, title: "기타채널 광고", cat: "보험", assignee: "", status: "todo", before: "", after: "", progress: 0, reason: "", note: "" },
+  { id: 17, title: "보험 판매 하단점 개시", cat: "오프라인", assignee: "", status: "todo", before: "", after: "", progress: 0, reason: "", note: "" },
+  { id: 18, title: "신차/렌트리스 사업검토", cat: "다나와", assignee: "", status: "todo", before: "", after: "", progress: 0, reason: "", note: "" },
+  { id: 19, title: "중고차 사업검토", cat: "다나와", assignee: "", status: "todo", before: "", after: "", progress: 0, reason: "", note: "" },
 
-  { id: 10, title: "모바일 정책 자동화", main: "사운본", sub: "없음", assignee: "신충호", due: "—", status: "doing", before: 150, after: "", progress: 50, reason: "", note: "상부점 정책을 상담사용 원페이지로 자동 업데이트. 온라인 정책 진행 중, 오프라인은 담당자 채용 중." },
-  { id: 11, title: "인터넷&유심 정책 자동화", main: "사운본", sub: "없음", assignee: "김은지", due: "—", status: "doing", before: 150, after: "", progress: 15, reason: "", note: "모바일과 동일 구조. 정책팀 이관 검토 중." },
-  { id: 12, title: "센터장 판매마진평균 계산 자동화", main: "사운본", sub: "없음", assignee: "김은지", due: "—", status: "doing", before: 30, after: "", progress: 20, reason: "", note: "데일리 마진평균 계산·전달. 현재 위클리로 지연, 자동화 시 데일리 가능." },
-
-  { id: 13, title: "G마켓 입점 준비", main: "B2B", sub: "없음", assignee: "심현우", due: "—", status: "doing", before: "", after: "", progress: 20, reason: "", note: "현우 주도(서정 부). 세팅 후 외부 업체 미팅 예정. 내 역할 정의 필요." },
+  // 신규 — 진행 중
+  { id: 20, title: "아정네트웍스 DB마케팅 활용안", cat: "보험", assignee: "", status: "doing", before: "", after: "", progress: 0, reason: "", note: "" },
+  { id: 21, title: "PC사업검토", cat: "다나와", assignee: "", status: "doing", before: "", after: "", progress: 0, reason: "", note: "" },
+  { id: 22, title: "미팅녹음 후 원스탑 자동화", cat: "기타", assignee: "", status: "doing", before: "", after: "", progress: 0, reason: "", note: "(자동화) — 카테고리에 '자동화'가 없어 기타로 분류." },
 ];
 
-const STORAGE_KEY = "ts2_board_v1";
-function loadTasks() {
-  try { const r = localStorage.getItem(STORAGE_KEY); if (r) return JSON.parse(r); } catch (e) {}
-  return SEED;
-}
+const STORAGE_KEY = "ts2_board_v2";
+function loadTasks() { try { const r = localStorage.getItem(STORAGE_KEY); if (r) return JSON.parse(r); } catch (e) {} return SEED; }
 function saveTasks(d) { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(d)); } catch (e) {} }
 
-const EMPTY = { title: "", main: "보험", sub: "없음", assignee: "", due: "", status: "todo", before: "", after: "", progress: 0, reason: "", note: "" };
+const EMPTY = { title: "", cat: "보험", assignee: "", status: "todo", before: "", after: "", progress: 0, reason: "", note: "" };
+const isEff = (t) => t.before !== "" && t.after !== "" && !isNaN(t.before) && !isNaN(t.after);
 
 function Tag({ label, className }) {
   return <span className={"inline-flex items-center rounded-md px-1.5 py-0.5 text-[11px] font-medium ring-1 ring-inset " + className}>{label}</span>;
@@ -74,23 +89,17 @@ function Tag({ label, className }) {
 
 function Card({ t, onDragStart, onClick, onDelete }) {
   const stuck = t.status === "stuck";
-  const hasEff = t.before !== "" && t.after !== "" && !isNaN(t.before) && !isNaN(t.after);
+  const hasEff = isEff(t);
   return (
     <div draggable onDragStart={(e) => onDragStart(e, t.id)} onClick={() => onClick(t)}
-      className={"group relative cursor-grab rounded-xl bg-white p-3 shadow-sm ring-1 ring-inset transition hover:shadow-md active:cursor-grabbing " + (stuck ? "ring-red-200 border-l-4 border-l-red-400" : "ring-slate-200")}>
+      className={"group relative cursor-grab rounded-xl border-l-4 bg-white p-3 shadow-sm ring-1 ring-inset transition hover:shadow-md active:cursor-grabbing " + STATUS_BORDER[t.status] + " " + (stuck ? "ring-red-200" : "ring-slate-200")}>
       <button onClick={(e) => { e.stopPropagation(); onDelete(t.id); }}
         className="absolute -right-1.5 -top-1.5 hidden h-5 w-5 items-center justify-center rounded-full bg-white text-slate-400 shadow ring-1 ring-slate-200 hover:bg-red-50 hover:text-red-500 group-hover:flex" title="삭제">✕</button>
-
       <div className="flex items-center justify-between">
         <span className="text-[10px] font-medium text-slate-400">#{t.id}</span>
-        <div className="flex gap-1">
-          <Tag label={t.main} className={MAIN_COLORS[t.main]} />
-          {t.sub && t.sub !== "없음" && <Tag label={t.sub} className="bg-slate-50 text-slate-500 ring-slate-200" />}
-        </div>
+        <Tag label={t.cat} className={catColor(t.cat)} />
       </div>
-
       <h3 className="mt-1.5 text-[13px] font-semibold leading-snug text-slate-800">{t.title}</h3>
-
       {hasEff && (
         <div className="mt-1.5 text-[12px] text-slate-500">
           <span className="text-slate-400 tabular-nums">{t.before}분</span>
@@ -99,21 +108,24 @@ function Card({ t, onDragStart, onClick, onDelete }) {
           <span className="ml-1.5 text-[11px] text-emerald-600 tabular-nums">▼{t.before - t.after}분</span>
         </div>
       )}
-
       {t.note && <p className="clamp2 mt-1.5 text-[11px] leading-snug text-slate-500">{t.note}</p>}
-
       {t.status !== "done" && !hasEff && (
         <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
           <div className="h-full rounded-full bg-blue-500" style={{ width: t.progress + "%" }}></div>
         </div>
       )}
-
       {stuck && t.reason && <p className="mt-2 rounded-lg bg-red-50/70 px-2 py-1 text-[11px] leading-snug text-red-700 ring-1 ring-inset ring-red-100">🔴 {t.reason}</p>}
+      <div className="mt-2.5 text-[11px] text-slate-400">👤 {t.assignee || "—"}</div>
+    </div>
+  );
+}
 
-      <div className="mt-2.5 flex items-center justify-between text-[11px] text-slate-400">
-        <span>👤 {t.assignee || "—"}</span>
-        <span className="tabular-nums">{t.due || "—"}</span>
-      </div>
+function Kpi({ label, value, sub, accent }) {
+  return (
+    <div className="rounded-xl bg-white p-3.5 text-center shadow-sm ring-1 ring-inset ring-slate-200">
+      <div className="text-[11px] font-medium text-slate-500">{label}</div>
+      <div className={"mt-1 text-2xl font-bold tabular-nums leading-none " + (accent || "text-slate-800")}>{value}</div>
+      {sub && <div className="mt-1 text-[11px] text-slate-400">{sub}</div>}
     </div>
   );
 }
@@ -123,7 +135,6 @@ function Modal({ data, onChange, onSave, onClose, onDelete }) {
   const set = (k, v) => onChange({ ...data, [k]: v });
   const field = "w-full rounded-lg border border-slate-200 px-2.5 py-1.5 text-[13px] outline-none focus:border-slate-400";
   const handleSave = () => { if (!data.title.trim()) { setErr(true); return; } onSave(); };
-
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" onClick={onClose}>
       <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
@@ -138,45 +149,27 @@ function Modal({ data, onChange, onSave, onClose, onDelete }) {
             {err && <p className="mt-1 text-[11px] text-red-500">업무명을 입력해줘.</p>}
           </div>
           <div className="grid grid-cols-2 gap-2.5">
-            <div>
-              <label className="mb-1 block text-[11px] font-medium text-slate-500">메인 (사업군)</label>
-              <select className={field} value={data.main} onChange={(e) => set("main", e.target.value)}>
-                {MAIN_OPTIONS.map((o) => <option key={o}>{o}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="mb-1 block text-[11px] font-medium text-slate-500">서브 (요청)</label>
-              <select className={field} value={data.sub} onChange={(e) => set("sub", e.target.value)}>
-                {SUB_OPTIONS.map((o) => <option key={o}>{o}</option>)}
-              </select>
-            </div>
+            <div><label className="mb-1 block text-[11px] font-medium text-slate-500">분류</label>
+              <select className={field} value={data.cat} onChange={(e) => set("cat", e.target.value)}>{CAT_OPTIONS.map((o) => <option key={o}>{o}</option>)}</select></div>
+            <div><label className="mb-1 block text-[11px] font-medium text-slate-500">담당자</label>
+              <select className={field} value={data.assignee} onChange={(e) => set("assignee", e.target.value)}>
+                <option value="">미지정</option>{ASSIGNEE_OPTIONS.map((o) => <option key={o}>{o}</option>)}
+              </select></div>
           </div>
-          <div className="grid grid-cols-2 gap-2.5">
-            <input className={field} placeholder="담당자" value={data.assignee} onChange={(e) => set("assignee", e.target.value)} />
-            <input className={field} placeholder="기한 (06.15)" value={data.due} onChange={(e) => set("due", e.target.value)} />
-          </div>
-          <div>
-            <label className="mb-1 block text-[11px] font-medium text-slate-500">상태</label>
-            <select className={field} value={data.status} onChange={(e) => set("status", e.target.value)}>
-              {COLUMNS.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
-            </select>
-          </div>
+          <div><label className="mb-1 block text-[11px] font-medium text-slate-500">상태</label>
+            <select className={field} value={data.status} onChange={(e) => set("status", e.target.value)}>{COLUMNS.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}</select></div>
           <div className="rounded-lg bg-slate-50 p-2.5">
             <label className="mb-1 block text-[11px] font-medium text-slate-500">효율화 (선택) — 보고용</label>
             <div className="flex items-center gap-2 text-[13px]">
-              <input className="w-20 rounded-lg border border-slate-200 px-2 py-1 text-center outline-none focus:border-slate-400" placeholder="전" type="number"
-                value={data.before} onChange={(e) => set("before", e.target.value === "" ? "" : Number(e.target.value))} />
+              <input className="w-20 rounded-lg border border-slate-200 px-2 py-1 text-center outline-none focus:border-slate-400" placeholder="전" type="number" value={data.before} onChange={(e) => set("before", e.target.value === "" ? "" : Number(e.target.value))} />
               <span className="text-slate-400">분 →</span>
-              <input className="w-20 rounded-lg border border-slate-200 px-2 py-1 text-center outline-none focus:border-slate-400" placeholder="후" type="number"
-                value={data.after} onChange={(e) => set("after", e.target.value === "" ? "" : Number(e.target.value))} />
+              <input className="w-20 rounded-lg border border-slate-200 px-2 py-1 text-center outline-none focus:border-slate-400" placeholder="후" type="number" value={data.after} onChange={(e) => set("after", e.target.value === "" ? "" : Number(e.target.value))} />
               <span className="text-slate-400">분</span>
             </div>
           </div>
           {data.status !== "done" && (
-            <div>
-              <label className="mb-1 block text-[11px] font-medium text-slate-500">진행률 {data.progress}%</label>
-              <input type="range" min="0" max="100" value={data.progress} onChange={(e) => set("progress", Number(e.target.value))} className="w-full" />
-            </div>
+            <div><label className="mb-1 block text-[11px] font-medium text-slate-500">진행률 {data.progress}%</label>
+              <input type="range" min="0" max="100" value={data.progress} onChange={(e) => set("progress", Number(e.target.value))} className="w-full" /></div>
           )}
           {data.status === "stuck" && (
             <input className={field + " border-red-200 bg-red-50/40"} placeholder="🔴 막힌 사유 (예: 예산 / 사람 / 히스토리)" value={data.reason} onChange={(e) => set("reason", e.target.value)} />
@@ -197,55 +190,86 @@ function Modal({ data, onChange, onSave, onClose, onDelete }) {
 
 function App() {
   const [tasks, setTasks] = useState(loadTasks);
-  const [fMain, setFMain] = useState("전체");
-  const [fSub, setFSub] = useState("전체");
+  const [active, setActive] = useState("전체");
   const [modal, setModal] = useState(null);
   const [dragId, setDragId] = useState(null);
-
   useEffect(() => { saveTasks(tasks); }, [tasks]);
 
-  const filtered = useMemo(() =>
-    tasks.filter((t) => (fMain === "전체" || t.main === fMain) && (fSub === "전체" || t.sub === fSub)),
-    [tasks, fMain, fSub]);
+  // 필터 칩 = 실제 존재하는 분류로 자동 생성
+  const chips = useMemo(() => {
+    const present = new Set(tasks.map((t) => t.cat));
+    return CAT_OPTIONS.filter((c) => present.has(c));
+  }, [tasks]);
+  useEffect(() => { if (active !== "전체" && !chips.includes(active)) setActive("전체"); }, [chips, active]);
+
+  const filtered = useMemo(() => tasks.filter((t) => active === "전체" || t.cat === active), [tasks, active]);
+  const doneFiltered = filtered.filter((t) => t.status === "done");
+
+  // KPI = 현재 필터 기준
+  const stats = useMemo(() => {
+    const done = filtered.filter((t) => t.status === "done");
+    const doing = filtered.filter((t) => t.status === "doing");
+    const stuck = filtered.filter((t) => t.status === "stuck");
+    const effDone = done.filter(isEff);
+    const totalSaved = effDone.reduce((s, t) => s + (t.before - t.after), 0);
+    return { done, doing, stuck, totalSaved, effCount: effDone.length };
+  }, [filtered]);
+
+  // 사업부별 현황 = 전체 기준
+  const byCat = useMemo(() =>
+    CAT_OPTIONS.map((c) => {
+      const inCat = tasks.filter((t) => t.cat === c);
+      const dn = inCat.filter((t) => t.status === "done");
+      const saved = dn.filter(isEff).reduce((s, t) => s + (t.before - t.after), 0);
+      return { c, all: inCat.length, done: dn.length, saved };
+    }).filter((x) => x.all > 0),
+    [tasks]);
 
   const onDragStart = (e, id) => { setDragId(id); e.dataTransfer.effectAllowed = "move"; };
-  const onDrop = (status) => {
-    if (dragId == null) return;
-    setTasks((ts) => ts.map((t) => (t.id === dragId ? { ...t, status } : t)));
-    setDragId(null);
-  };
+  const onDrop = (status) => { if (dragId == null) return; setTasks((ts) => ts.map((t) => (t.id === dragId ? { ...t, status } : t))); setDragId(null); };
   const saveModal = () => {
     if (modal.id) setTasks((ts) => ts.map((t) => (t.id === modal.id ? modal : t)));
     else setTasks((ts) => [...ts, { ...modal, id: (ts.length ? Math.max(...ts.map((x) => x.id)) : 0) + 1 }]);
     setModal(null);
   };
-  const deleteTask = (id) => {
-    if (!confirm("정말 삭제하시겠습니까?")) return;
-    setTasks((ts) => ts.filter((t) => t.id !== id));
-    setModal(null);
-  };
-  const reset = () => { if (confirm("시드 데이터로 초기화할까? (현재 변경사항이 사라져)")) { setTasks(SEED); } };
-
-  const sel = "rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[12px] outline-none focus:border-slate-400";
+  const deleteTask = (id) => { if (!confirm("정말 삭제하시겠습니까?")) return; setTasks((ts) => ts.filter((t) => t.id !== id)); setModal(null); };
+  const reset = () => { if (confirm("시드 데이터로 초기화할까? (현재 변경사항이 사라져)")) setTasks(SEED); };
 
   return (
     <div className="min-h-screen w-full p-4">
-      <div className="mb-4 flex flex-wrap items-center gap-2">
+      {/* 헤더 */}
+      <div className="mb-3 flex flex-wrap items-center gap-2">
         <h1 className="mr-2 text-lg font-bold tracking-tight text-slate-900">전략실행2팀 업무 보드</h1>
-        <select className={sel} value={fMain} onChange={(e) => setFMain(e.target.value)}>
-          <option>전체</option>{MAIN_OPTIONS.map((o) => <option key={o}>{o}</option>)}
-        </select>
-        <select className={sel} value={fSub} onChange={(e) => setFSub(e.target.value)}>
-          <option>전체</option>{SUB_OPTIONS.filter((o) => o !== "없음").map((o) => <option key={o}>{o}</option>)}
-        </select>
         <button onClick={() => setModal({ ...EMPTY })} className="ml-auto inline-flex items-center gap-1 rounded-lg bg-slate-900 px-3 py-1.5 text-[13px] font-medium text-white hover:bg-slate-700">+ 새 업무</button>
       </div>
 
-      <div className="flex gap-3 overflow-x-auto pb-4">
+      {/* KPI — 필터 기준 */}
+      <div className="mb-4 grid grid-cols-4 gap-3">
+        <Kpi label={"총 절감 시간 " + (active === "전체" ? "(전체)" : "(" + active + ")")} value={stats.totalSaved > 0 ? stats.totalSaved + "분" : "—"} sub={stats.totalSaved > 0 ? "효율화 " + stats.effCount + "건" : "완료 카드에 '후' 값 입력 시 집계"} accent="text-emerald-600" />
+        <Kpi label="진행 중" value={stats.doing.length} accent="text-blue-600" />
+        <Kpi label="🔴 막힘" value={stats.stuck.length} sub={stats.stuck.length ? "보드 '막힘' 컬럼에 사유" : "막힌 업무 없음"} accent="text-red-600" />
+        <Kpi label="완료" value={stats.done.length} accent="text-emerald-600" />
+      </div>
+
+      {/* 필터 — 존재하는 분류로 자동 생성 */}
+      {chips.length > 0 && (
+        <div className="mb-4 flex flex-wrap items-center gap-1.5">
+          {["전체", ...chips].map((m) => (
+            <button key={m} onClick={() => setActive(m)}
+              className={"rounded-full px-3 py-1 text-[12px] font-medium transition " + (active === m ? "bg-slate-900 text-white" : "bg-white text-slate-500 ring-1 ring-inset ring-slate-200 hover:bg-slate-100")}>
+              {m}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* 보드(3/4) + 우측 패널(1/4, 완료 KPI 칸과 동일 폭) */}
+      <div className="grid grid-cols-4 items-start gap-3">
+        <div className="col-span-3 flex gap-3">
         {COLUMNS.map((col) => {
           const items = filtered.filter((t) => t.status === col.key);
           return (
-            <div key={col.key} onDragOver={(e) => e.preventDefault()} onDrop={() => onDrop(col.key)} className="flex w-[270px] shrink-0 flex-col rounded-xl p-1">
+            <div key={col.key} onDragOver={(e) => e.preventDefault()} onDrop={() => onDrop(col.key)} className="flex min-w-0 flex-1 flex-col rounded-xl p-1">
               <div className="mb-2 flex items-center gap-1.5 px-1">
                 <span className={"h-2 w-2 rounded-full " + col.dot}></span>
                 <span className="text-[13px] font-semibold text-slate-700">{col.label}</span>
@@ -258,9 +282,53 @@ function App() {
             </div>
           );
         })}
+        </div>
+
+        {/* 우측 패널 = 완료 KPI 칸 폭 */}
+        <div className="col-span-1 flex flex-col gap-3">
+          <div className="rounded-xl bg-white p-4 shadow-sm ring-1 ring-inset ring-slate-200">
+            <div className="mb-3 text-[14px] font-bold text-slate-800">분류별 현황 <span className="text-[11px] font-normal text-slate-400">(완료 · 효율화)</span></div>
+            <div className="flex flex-col gap-3.5">
+              {byCat.map((x) => (
+                <div key={x.c}>
+                  <div className="flex items-center justify-between text-[12px]">
+                    <span className="font-semibold text-slate-700">{x.c}</span>
+                    <span className="tabular-nums text-slate-400">
+                      완료 {x.done}/{x.all}
+                      {x.saved > 0 && <span className="ml-1.5 font-semibold text-emerald-600">▼{x.saved}분</span>}
+                    </span>
+                  </div>
+                  <div className="mt-1.5 h-2 w-full overflow-hidden rounded-full bg-slate-100">
+                    <div className={"h-full rounded-full " + catBar(x.c)} style={{ width: (x.all ? (x.done / x.all) * 100 : 0) + "%" }}></div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="rounded-xl bg-white p-4 shadow-sm ring-1 ring-inset ring-slate-200">
+            <div className="mb-2.5 text-[14px] font-bold text-slate-800">✅ 완료 히스토리 <span className="text-[11px] font-normal text-slate-400">({doneFiltered.length})</span></div>
+            {doneFiltered.length === 0 ? (
+              <p className="py-3 text-center text-[12px] leading-relaxed text-slate-300">완료 업무가 여기 쌓여.<br/>카드를 '완료'로 옮기면 기록돼.</p>
+            ) : (
+              <div className="flex flex-col gap-1">
+                {doneFiltered.map((t) => (
+                  <button key={t.id} onClick={() => setModal({ ...t })} className="flex items-center gap-2 rounded-lg p-2 text-left hover:bg-slate-50">
+                    <Tag label={t.cat} className={catColor(t.cat)} />
+                    <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-slate-700">{t.title}</span>
+                    <span className="shrink-0 text-[11px] text-slate-400">👤 {t.assignee || "—"}</span>
+                    {isEff(t)
+                      ? <span className="shrink-0 text-[11px] font-semibold text-emerald-600 tabular-nums">▼{t.before - t.after}분</span>
+                      : <span className="shrink-0 text-[11px] text-slate-300">—</span>}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
-      <div className="mt-1 flex items-center gap-3 px-1 text-[11px] text-slate-400">
+      <div className="mt-3 flex items-center gap-3 px-1 text-[11px] text-slate-400">
         <span>이 브라우저에 자동 저장됨 (localStorage)</span>
         <button onClick={reset} className="hover:text-slate-600 hover:underline">초기화</button>
       </div>
