@@ -313,14 +313,14 @@ function App() {
             ) : (
               <div className="flex flex-col gap-1">
                 {doneFiltered.map((t) => (
-                  <button key={t.id} onClick={() => setModal({ ...t })} className="flex items-center gap-2 rounded-lg p-2 text-left hover:bg-slate-50">
+                  <div key={t.id} className="flex items-center gap-2 rounded-lg p-2">
                     <Tag label={t.cat} className={catColor(t.cat)} />
                     <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-slate-700">{t.title}</span>
                     <span className="shrink-0 text-[11px] text-slate-400">👤 {t.assignee || "—"}</span>
                     {isEff(t)
                       ? <span className="shrink-0 text-[11px] font-semibold text-emerald-600 tabular-nums">▼{t.before - t.after}분</span>
                       : <span className="shrink-0 text-[11px] text-slate-300">—</span>}
-                  </button>
+                  </div>
                 ))}
               </div>
             )}
