@@ -8,6 +8,7 @@
 <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   body { font-family: 'Pretendard', -apple-system, 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif; }
   .clamp2 { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
@@ -17,23 +18,45 @@
 <div id="root"></div>
 
 <script type="text/babel">
-const { useState, useMemo, useEffect, useCallback } = React;
+const { useState, useMemo, useEffect, useCallback, useRef } = React;
 
-// ── 백엔드 (구글시트 + GAS 웹앱) ──
-const GAS_URL = "https://script.google.com/macros/s/AKfycbyW0bP6_hMolaJq2tZma1sRF5XqpP_ROi33Wvmf-jwNONvGK5B1LEPePbQkVL9I4A1lmg/exec";
+// ── 백엔드 (Supabase) ──
+const SUPABASE_URL = "https://buhxexonelkwysutwhxg.supabase.co";
+const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ1aHhleG9uZWxrd3lzdXR3aHhnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA5Njk0MTMsImV4cCI6MjA5NjU0NTQxM30.VTQA9z7VNATjfmYo9LDw5g5SjCWcikixBZDsRXfgNYg";
+const sbc = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+
+// DB(before_min/after_min) ↔ 앱(before/after) 매핑
+const fromRow = (r) => ({
+  id: r.id, title: r.title || "", cat: r.cat || "기타", assignee: r.assignee || "",
+  status: r.status || "todo",
+  before: (r.before_min === null || r.before_min === undefined) ? "" : r.before_min,
+  after: (r.after_min === null || r.after_min === undefined) ? "" : r.after_min,
+  progress: r.progress || 0, reason: r.reason || "", note: r.note || "",
+});
+const toRow = (c) => ({
+  title: c.title || "", cat: c.cat, assignee: c.assignee || "", status: c.status,
+  before_min: (c.before === "" || c.before === null || c.before === undefined) ? null : Number(c.before),
+  after_min: (c.after === "" || c.after === null || c.after === undefined) ? null : Number(c.after),
+  progress: Number(c.progress) || 0, reason: c.reason || "", note: c.note || "",
+});
 
 async function apiGet() {
-  const r = await fetch(GAS_URL, { method: "GET" });
-  const j = await r.json();
-  if (!j.ok) throw new Error(j.error || "불러오기 실패");
-  return j.tasks;
+  const { data, error } = await sbc.from("tasks").select("*").eq("deleted", false).order("id", { ascending: true });
+  if (error) throw error;
+  return data.map(fromRow);
 }
-async function apiPost(payload) {
-  // text/plain 으로 보내 CORS preflight 회피 (헤더 추가 금지)
-  const r = await fetch(GAS_URL, { method: "POST", body: JSON.stringify(payload) });
-  const j = await r.json();
-  if (!j.ok) throw new Error(j.error || "저장 실패");
-  return j;
+async function apiInsert(card) {
+  const { data, error } = await sbc.from("tasks").insert(toRow(card)).select().single();
+  if (error) throw error;
+  return fromRow(data);
+}
+async function apiUpdate(card) {
+  const { error } = await sbc.from("tasks").update(toRow(card)).eq("id", card.id);
+  if (error) throw error;
+}
+async function apiDelete(id) {
+  const { error } = await sbc.from("tasks").update({ deleted: true }).eq("id", id);
+  if (error) throw error;
 }
 
 const CAT_OPTIONS = ["보험", "오프라인", "CS", "핀테크", "다나와", "사운본", "기타"];
@@ -187,32 +210,41 @@ function App() {
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState(null);
   const [notice, setNotice] = useState(null);
-  const [syncedAt, setSyncedAt] = useState(null);
+  const [live, setLive] = useState(false);
 
   const [active, setActive] = useState("전체");
   const [activeAsg, setActiveAsg] = useState("전체");
   const [modal, setModal] = useState(null);
   const [dragId, setDragId] = useState(null);
+  const refetchTimer = useRef(null);
 
   const flash = useCallback((m) => { setNotice(m); setTimeout(() => setNotice(null), 3500); }, []);
 
   const refresh = useCallback(async () => {
-    setLoading(true);
-    try { const t = await apiGet(); setTasks(t); setSyncedAt(new Date()); setErr(null); }
-    catch (e) { setErr(e.message); }
+    try { const t = await apiGet(); setTasks(t); setErr(null); }
+    catch (e) { setErr(e.message || String(e)); }
     finally { setLoading(false); }
   }, []);
 
-  useEffect(() => { refresh(); }, [refresh]);
+  // 최초 로드 + 실시간 구독
+  useEffect(() => {
+    refresh();
+    const ch = sbc.channel("tasks-rt")
+      .on("postgres_changes", { event: "*", schema: "public", table: "tasks" }, () => {
+        // 변경 감지 → 살짝 모아서 다시 불러오기 (중복 호출 방지)
+        if (refetchTimer.current) clearTimeout(refetchTimer.current);
+        refetchTimer.current = setTimeout(refresh, 250);
+      })
+      .subscribe((status) => { setLive(status === "SUBSCRIBED"); });
+    return () => { sbc.removeChannel(ch); if (refetchTimer.current) clearTimeout(refetchTimer.current); };
+  }, [refresh]);
 
-  // 분류 칩
   const chips = useMemo(() => {
     const present = new Set(tasks.map((t) => t.cat));
     return CAT_OPTIONS.filter((c) => present.has(c));
   }, [tasks]);
   useEffect(() => { if (active !== "전체" && !chips.includes(active)) setActive("전체"); }, [chips, active]);
 
-  // 담당자 칩 (미지정 포함)
   const asgChips = useMemo(() => {
     const present = new Set(tasks.map(asgOf));
     return ["미지정", ...ASSIGNEE_OPTIONS].filter((a) => present.has(a));
@@ -256,8 +288,8 @@ function App() {
     if (!card || card.status === status) return;
     const prev = tasks;
     const updated = { ...card, status };
-    setTasks((ts) => ts.map((t) => (t.id === card.id ? updated : t))); // 낙관적 반영
-    apiPost({ action: "save", card: updated }).catch((e) => { setTasks(prev); flash("이동 저장 실패 — " + e.message); });
+    setTasks((ts) => ts.map((t) => (t.id === card.id ? updated : t))); // 낙관적
+    apiUpdate(updated).catch((e) => { setTasks(prev); flash("이동 저장 실패 — " + (e.message || e)); });
   };
 
   const saveModal = async () => {
@@ -265,39 +297,36 @@ function App() {
     setSaving(true);
     try {
       if (card.id) {
-        const prev = tasks;
-        setTasks((ts) => ts.map((t) => (t.id === card.id ? card : t)));
-        await apiPost({ action: "save", card }).catch((e) => { setTasks(prev); throw e; });
+        setTasks((ts) => ts.map((t) => (t.id === card.id ? card : t))); // 낙관적
+        await apiUpdate(card);
       } else {
-        const res = await apiPost({ action: "save", card }); // 서버가 id 발급
-        setTasks((ts) => [...ts, res.card]);
+        const created = await apiInsert(card); // 서버가 id 발급
+        setTasks((ts) => ts.some((t) => t.id === created.id) ? ts : [...ts, created]);
       }
       setModal(null);
-    } catch (e) { flash("저장 실패 — " + e.message); }
+    } catch (e) { flash("저장 실패 — " + (e.message || e)); }
     finally { setSaving(false); }
   };
 
   const deleteTask = async (id) => {
     if (!confirm("정말 삭제하시겠습니까?")) return;
     const prev = tasks;
-    setTasks((ts) => ts.filter((t) => t.id !== id)); // 낙관적 반영
+    setTasks((ts) => ts.filter((t) => t.id !== id)); // 낙관적
     setModal(null);
-    try { await apiPost({ action: "delete", id }); }
-    catch (e) { setTasks(prev); flash("삭제 실패 — " + e.message); }
+    try { await apiDelete(id); }
+    catch (e) { setTasks(prev); flash("삭제 실패 — " + (e.message || e)); }
   };
 
   const chipCls = (on) => "rounded-full px-3 py-1 text-[12px] font-medium transition " + (on ? "bg-slate-900 text-white" : "bg-white text-slate-500 ring-1 ring-inset ring-slate-200 hover:bg-slate-100");
-  const syncText = syncedAt ? syncedAt.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", second: "2-digit" }) + " 기준" : "";
 
   return (
     <div className="min-h-screen w-full p-4">
-      {/* 헤더 */}
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <h1 className="mr-1 text-lg font-bold tracking-tight text-slate-900">전략실행2팀 업무 보드</h1>
-        <button onClick={refresh} disabled={loading} className="inline-flex items-center gap-1 rounded-lg bg-white px-2.5 py-1.5 text-[12px] font-medium text-slate-600 ring-1 ring-inset ring-slate-200 hover:bg-slate-100 disabled:opacity-50" title="시트에서 다시 불러오기">
-          <span className={loading ? "inline-block animate-spin" : ""}>🔄</span> 새로고침
-        </button>
-        {syncText && <span className="text-[11px] text-slate-400">{syncText}</span>}
+        <span className={"inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium " + (live ? "bg-emerald-50 text-emerald-600 ring-1 ring-inset ring-emerald-200" : "bg-slate-100 text-slate-400")}>
+          <span className={"h-1.5 w-1.5 rounded-full " + (live ? "bg-emerald-500" : "bg-slate-300")}></span>{live ? "실시간" : "연결 중"}
+        </span>
+        <button onClick={refresh} className="inline-flex items-center gap-1 rounded-lg bg-white px-2.5 py-1.5 text-[12px] font-medium text-slate-600 ring-1 ring-inset ring-slate-200 hover:bg-slate-100" title="다시 불러오기">🔄</button>
         <button onClick={() => setModal({ ...EMPTY })} className="ml-auto inline-flex items-center gap-1 rounded-lg bg-slate-900 px-3 py-1.5 text-[13px] font-medium text-white hover:bg-slate-700">+ 새 업무</button>
       </div>
 
@@ -305,7 +334,7 @@ function App() {
 
       {err && tasks.length === 0 ? (
         <div className="rounded-xl bg-white p-8 text-center shadow-sm ring-1 ring-inset ring-slate-200">
-          <p className="text-[13px] text-slate-600">시트에서 불러오지 못했어.</p>
+          <p className="text-[13px] text-slate-600">데이터를 불러오지 못했어.</p>
           <p className="mt-1 text-[11px] text-slate-400">{err}</p>
           <button onClick={refresh} className="mt-3 rounded-lg bg-slate-900 px-4 py-1.5 text-[13px] font-medium text-white hover:bg-slate-700">다시 시도</button>
         </div>
@@ -313,7 +342,6 @@ function App() {
         <div className="py-20 text-center text-[13px] text-slate-400">불러오는 중…</div>
       ) : (
       <React.Fragment>
-        {/* KPI */}
         <div className="mb-4 grid grid-cols-4 gap-3">
           <Kpi label={"총 절감 시간 (" + filterLabel + ")"} value={stats.totalSaved > 0 ? stats.totalSaved + "분" : "—"} sub={stats.totalSaved > 0 ? "효율화 " + stats.effCount + "건" : "완료 카드에 '후' 값 입력 시 집계"} accent="text-emerald-600" />
           <Kpi label="진행 중" value={stats.doing.length} accent="text-blue-600" />
@@ -321,14 +349,12 @@ function App() {
           <Kpi label="완료" value={stats.done.length} accent="text-emerald-600" />
         </div>
 
-        {/* 필터 — 분류 */}
         {chips.length > 0 && (
           <div className="mb-2 flex flex-wrap items-center gap-1.5">
             <span className="mr-1 w-9 shrink-0 text-[11px] font-semibold text-slate-400">분류</span>
             {["전체", ...chips].map((m) => (<button key={m} onClick={() => setActive(m)} className={chipCls(active === m)}>{m}</button>))}
           </div>
         )}
-        {/* 필터 — 담당자 (분류와 AND) */}
         {asgChips.length > 0 && (
           <div className="mb-4 flex flex-wrap items-center gap-1.5">
             <span className="mr-1 w-9 shrink-0 text-[11px] font-semibold text-slate-400">담당</span>
@@ -336,7 +362,6 @@ function App() {
           </div>
         )}
 
-        {/* 보드 + 우측 패널 */}
         <div className="grid grid-cols-4 items-start gap-3">
           <div className="col-span-3 flex gap-3">
           {COLUMNS.map((col) => {
@@ -396,9 +421,9 @@ function App() {
         </div>
 
         <div className="mt-3 flex items-center gap-3 px-1 text-[11px] text-slate-400">
-          <span>구글시트에 저장됨 · 팀 공유</span>
+          <span>Supabase 저장 · 팀 실시간 공유</span>
           <span className="text-slate-300">|</span>
-          <span>바뀐 내용은 <b className="font-semibold text-slate-500">🔄 새로고침</b>으로 반영</span>
+          <span>다른 사람이 바꾸면 자동으로 반영돼</span>
         </div>
       </React.Fragment>
       )}
