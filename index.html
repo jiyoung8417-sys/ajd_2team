@@ -47,7 +47,6 @@ const COLUMNS = [
 const STATUS_BORDER = { todo: "border-l-slate-300", doing: "border-l-blue-400", stuck: "border-l-red-400", done: "border-l-emerald-400" };
 
 const SEED = [
-  // 기존 업무 (문서 기반)
   { id: 1, title: "CSO 업무 관리 (PM)", cat: "CS", assignee: "임서정", status: "doing", before: "", after: "", progress: 50, reason: "", note: "CSO 업무 452개 정리 완료. 진행상황·우선순위는 CS 내부 구성원과 함께 정리 필요." },
   { id: 2, title: "CS 채팅방 효율화", cat: "CS", assignee: "임서정", status: "doing", before: "", after: "", progress: 40, reason: "", note: "야간근무: 대시보드 기획만 남음 / 센터장·파트장 보고: 정리 중." },
   { id: 3, title: "CS 인센티브 계산 자동화", cat: "CS", assignee: "임서정", status: "doing", before: "", after: "", progress: 85, reason: "", note: "FAQ 자동응답 봇 세팅만 남음. 6/10 개발 방식 논의 예정." },
@@ -61,16 +60,12 @@ const SEED = [
   { id: 11, title: "인터넷&유심 정책 자동화", cat: "사운본", assignee: "", status: "doing", before: 150, after: "", progress: 15, reason: "", note: "담당: 김은지. 정책팀 이관 검토 중." },
   { id: 12, title: "센터장 판매마진평균 계산 자동화", cat: "사운본", assignee: "", status: "doing", before: 30, after: "", progress: 20, reason: "", note: "담당: 김은지. 데일리 마진평균 계산·전달." },
   { id: 13, title: "G마켓 입점 준비", cat: "기타", assignee: "", status: "doing", before: "", after: "", progress: 20, reason: "", note: "담당: 심현우 주도. (구 B2B) 세팅 후 외부 업체 미팅 예정." },
-
-  // 신규 — 시작 전
   { id: 14, title: "GA 랜딩페이지", cat: "보험", assignee: "", status: "todo", before: "", after: "", progress: 0, reason: "", note: "" },
   { id: 15, title: "유튜브 영상광고", cat: "보험", assignee: "", status: "todo", before: "", after: "", progress: 0, reason: "", note: "" },
   { id: 16, title: "기타채널 광고", cat: "보험", assignee: "", status: "todo", before: "", after: "", progress: 0, reason: "", note: "" },
   { id: 17, title: "보험 판매 하단점 개시", cat: "오프라인", assignee: "", status: "todo", before: "", after: "", progress: 0, reason: "", note: "" },
   { id: 18, title: "신차/렌트리스 사업검토", cat: "다나와", assignee: "", status: "todo", before: "", after: "", progress: 0, reason: "", note: "" },
   { id: 19, title: "중고차 사업검토", cat: "다나와", assignee: "", status: "todo", before: "", after: "", progress: 0, reason: "", note: "" },
-
-  // 신규 — 진행 중
   { id: 20, title: "아정네트웍스 DB마케팅 활용안", cat: "보험", assignee: "", status: "doing", before: "", after: "", progress: 0, reason: "", note: "" },
   { id: 21, title: "PC사업검토", cat: "다나와", assignee: "", status: "doing", before: "", after: "", progress: 0, reason: "", note: "" },
   { id: 22, title: "미팅녹음 후 원스탑 자동화", cat: "기타", assignee: "", status: "doing", before: "", after: "", progress: 0, reason: "", note: "(자동화) — 카테고리에 '자동화'가 없어 기타로 분류." },
@@ -82,6 +77,7 @@ function saveTasks(d) { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(d
 
 const EMPTY = { title: "", cat: "보험", assignee: "", status: "todo", before: "", after: "", progress: 0, reason: "", note: "" };
 const isEff = (t) => t.before !== "" && t.after !== "" && !isNaN(t.before) && !isNaN(t.after);
+const asgOf = (t) => t.assignee || "미지정";
 
 function Tag({ label, className }) {
   return <span className={"inline-flex items-center rounded-md px-1.5 py-0.5 text-[11px] font-medium ring-1 ring-inset " + className}>{label}</span>;
@@ -109,6 +105,9 @@ function Card({ t, onDragStart, onClick, onDelete }) {
         </div>
       )}
       {t.note && <p className="clamp2 mt-1.5 text-[11px] leading-snug text-slate-500">{t.note}</p>}
+      {t.note && t.note.length > 50 && (
+        <button onClick={(e) => { e.stopPropagation(); onClick(t); }} className="mt-1 text-[10px] font-medium text-blue-500 hover:underline">상세 보기 →</button>
+      )}
       {t.status !== "done" && !hasEff && (
         <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
           <div className="h-full rounded-full bg-blue-500" style={{ width: t.progress + "%" }}></div>
@@ -137,9 +136,9 @@ function Modal({ data, onChange, onSave, onClose, onDelete }) {
   const handleSave = () => { if (!data.title.trim()) { setErr(true); return; } onSave(); };
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
-      <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl bg-white p-5 shadow-xl">
+      <div className="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white p-5 shadow-xl">
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-[15px] font-bold">{data.id ? "업무 수정" : "새 업무"}</h2>
+          <h2 className="text-[15px] font-bold">{data.id ? "업무 상세 / 수정" : "새 업무"}</h2>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-700">✕</button>
         </div>
         <div className="space-y-2.5">
@@ -174,7 +173,13 @@ function Modal({ data, onChange, onSave, onClose, onDelete }) {
           {data.status === "stuck" && (
             <input className={field + " border-red-200 bg-red-50/40"} placeholder="🔴 막힌 사유 (예: 예산 / 사람 / 히스토리)" value={data.reason} onChange={(e) => set("reason", e.target.value)} />
           )}
-          <textarea className={field + " h-20 resize-none"} placeholder="세부 내용 / 메모 (카드에 두 줄까지 표시됨)" value={data.note} onChange={(e) => set("note", e.target.value)} />
+          <div>
+            <div className="mb-1 flex items-center justify-between">
+              <label className="block text-[11px] font-medium text-slate-500">세부 내용 / 메모</label>
+              <span className="text-[10px] text-slate-400">{(data.note || "").length}자 · 칸 모서리를 끌어 더 키울 수 있어</span>
+            </div>
+            <textarea className={field + " min-h-[16rem] resize-y leading-relaxed"} placeholder="세부 내용을 자유롭게 적어. (길어도 됨 — 카드에선 2줄까지만 보이고, 전체 내용은 여기서 봐)" value={data.note} onChange={(e) => set("note", e.target.value)} />
+          </div>
         </div>
         <div className="mt-4 flex items-center justify-between">
           {data.id ? <button onClick={() => onDelete(data.id)} className="text-[13px] text-red-500 hover:underline">🗑 삭제</button> : <span />}
@@ -191,19 +196,36 @@ function Modal({ data, onChange, onSave, onClose, onDelete }) {
 function App() {
   const [tasks, setTasks] = useState(loadTasks);
   const [active, setActive] = useState("전체");
+  const [activeAsg, setActiveAsg] = useState("전체");
   const [modal, setModal] = useState(null);
   const [dragId, setDragId] = useState(null);
   useEffect(() => { saveTasks(tasks); }, [tasks]);
 
-  // 필터 칩 = 실제 존재하는 분류로 자동 생성
+  // 분류 칩 = 실제 존재하는 분류로 자동 생성
   const chips = useMemo(() => {
     const present = new Set(tasks.map((t) => t.cat));
     return CAT_OPTIONS.filter((c) => present.has(c));
   }, [tasks]);
   useEffect(() => { if (active !== "전체" && !chips.includes(active)) setActive("전체"); }, [chips, active]);
 
-  const filtered = useMemo(() => tasks.filter((t) => active === "전체" || t.cat === active), [tasks, active]);
+  // 담당자 칩 = 실제 존재하는 담당자로 자동 생성 (미지정 포함)
+  const asgChips = useMemo(() => {
+    const present = new Set(tasks.map(asgOf));
+    return ["미지정", ...ASSIGNEE_OPTIONS].filter((a) => present.has(a));
+  }, [tasks]);
+  useEffect(() => { if (activeAsg !== "전체" && !asgChips.includes(activeAsg)) setActiveAsg("전체"); }, [asgChips, activeAsg]);
+
+  // 분류 + 담당자 AND 필터
+  const filtered = useMemo(() => tasks.filter((t) =>
+    (active === "전체" || t.cat === active) &&
+    (activeAsg === "전체" || asgOf(t) === activeAsg)
+  ), [tasks, active, activeAsg]);
   const doneFiltered = filtered.filter((t) => t.status === "done");
+
+  const filterLabel = useMemo(() => {
+    const parts = [active !== "전체" ? active : null, activeAsg !== "전체" ? activeAsg : null].filter(Boolean);
+    return parts.length ? parts.join("·") : "전체";
+  }, [active, activeAsg]);
 
   // KPI = 현재 필터 기준
   const stats = useMemo(() => {
@@ -215,7 +237,7 @@ function App() {
     return { done, doing, stuck, totalSaved, effCount: effDone.length };
   }, [filtered]);
 
-  // 사업부별 현황 = 전체 기준
+  // 분류별 현황 = 전체 기준
   const byCat = useMemo(() =>
     CAT_OPTIONS.map((c) => {
       const inCat = tasks.filter((t) => t.cat === c);
@@ -235,6 +257,8 @@ function App() {
   const deleteTask = (id) => { if (!confirm("정말 삭제하시겠습니까?")) return; setTasks((ts) => ts.filter((t) => t.id !== id)); setModal(null); };
   const reset = () => { if (confirm("시드 데이터로 초기화할까? (현재 변경사항이 사라져)")) setTasks(SEED); };
 
+  const chipCls = (on) => "rounded-full px-3 py-1 text-[12px] font-medium transition " + (on ? "bg-slate-900 text-white" : "bg-white text-slate-500 ring-1 ring-inset ring-slate-200 hover:bg-slate-100");
+
   return (
     <div className="min-h-screen w-full p-4">
       {/* 헤더 */}
@@ -245,25 +269,33 @@ function App() {
 
       {/* KPI — 필터 기준 */}
       <div className="mb-4 grid grid-cols-4 gap-3">
-        <Kpi label={"총 절감 시간 " + (active === "전체" ? "(전체)" : "(" + active + ")")} value={stats.totalSaved > 0 ? stats.totalSaved + "분" : "—"} sub={stats.totalSaved > 0 ? "효율화 " + stats.effCount + "건" : "완료 카드에 '후' 값 입력 시 집계"} accent="text-emerald-600" />
+        <Kpi label={"총 절감 시간 (" + filterLabel + ")"} value={stats.totalSaved > 0 ? stats.totalSaved + "분" : "—"} sub={stats.totalSaved > 0 ? "효율화 " + stats.effCount + "건" : "완료 카드에 '후' 값 입력 시 집계"} accent="text-emerald-600" />
         <Kpi label="진행 중" value={stats.doing.length} accent="text-blue-600" />
         <Kpi label="🔴 막힘" value={stats.stuck.length} sub={stats.stuck.length ? "보드 '막힘' 컬럼에 사유" : "막힌 업무 없음"} accent="text-red-600" />
         <Kpi label="완료" value={stats.done.length} accent="text-emerald-600" />
       </div>
 
-      {/* 필터 — 존재하는 분류로 자동 생성 */}
+      {/* 필터 — 분류 (자동 생성) */}
       {chips.length > 0 && (
-        <div className="mb-4 flex flex-wrap items-center gap-1.5">
+        <div className="mb-2 flex flex-wrap items-center gap-1.5">
+          <span className="mr-1 w-9 shrink-0 text-[11px] font-semibold text-slate-400">분류</span>
           {["전체", ...chips].map((m) => (
-            <button key={m} onClick={() => setActive(m)}
-              className={"rounded-full px-3 py-1 text-[12px] font-medium transition " + (active === m ? "bg-slate-900 text-white" : "bg-white text-slate-500 ring-1 ring-inset ring-slate-200 hover:bg-slate-100")}>
-              {m}
-            </button>
+            <button key={m} onClick={() => setActive(m)} className={chipCls(active === m)}>{m}</button>
           ))}
         </div>
       )}
 
-      {/* 보드(3/4) + 우측 패널(1/4, 완료 KPI 칸과 동일 폭) */}
+      {/* 필터 — 담당자 (자동 생성, 분류와 AND) */}
+      {asgChips.length > 0 && (
+        <div className="mb-4 flex flex-wrap items-center gap-1.5">
+          <span className="mr-1 w-9 shrink-0 text-[11px] font-semibold text-slate-400">담당</span>
+          {["전체", ...asgChips].map((m) => (
+            <button key={m} onClick={() => setActiveAsg(m)} className={chipCls(activeAsg === m)}>{m === "전체" ? "전체" : "👤 " + m}</button>
+          ))}
+        </div>
+      )}
+
+      {/* 보드(3/4) + 우측 패널(1/4) */}
       <div className="grid grid-cols-4 items-start gap-3">
         <div className="col-span-3 flex gap-3">
         {COLUMNS.map((col) => {
@@ -284,7 +316,6 @@ function App() {
         })}
         </div>
 
-        {/* 우측 패널 = 완료 KPI 칸 폭 */}
         <div className="col-span-1 flex flex-col gap-3">
           <div className="rounded-xl bg-white p-4 shadow-sm ring-1 ring-inset ring-slate-200">
             <div className="mb-3 text-[14px] font-bold text-slate-800">분류별 현황 <span className="text-[11px] font-normal text-slate-400">(완료 · 효율화)</span></div>
