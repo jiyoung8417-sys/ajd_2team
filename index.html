@@ -26,17 +26,19 @@ const SUPABASE_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFz
 const sbc = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
 
 // DB(before_min/after_min) ↔ 앱(before/after) 매핑
+const numOrEmpty = (v) => (v === null || v === undefined) ? "" : v;
+const numOrNull = (v) => (v === "" || v === null || v === undefined) ? null : Number(v);
 const fromRow = (r) => ({
   id: r.id, title: r.title || "", cat: r.cat || "기타", assignee: r.assignee || "",
   status: r.status || "todo",
-  before: (r.before_min === null || r.before_min === undefined) ? "" : r.before_min,
-  after: (r.after_min === null || r.after_min === undefined) ? "" : r.after_min,
+  before: numOrEmpty(r.before_min), after: numOrEmpty(r.after_min),
+  beforeCnt: numOrEmpty(r.before_cnt), afterCnt: numOrEmpty(r.after_cnt),
   progress: r.progress || 0, reason: r.reason || "", note: r.note || "",
 });
 const toRow = (c) => ({
   title: c.title || "", cat: c.cat, assignee: c.assignee || "", status: c.status,
-  before_min: (c.before === "" || c.before === null || c.before === undefined) ? null : Number(c.before),
-  after_min: (c.after === "" || c.after === null || c.after === undefined) ? null : Number(c.after),
+  before_min: numOrNull(c.before), after_min: numOrNull(c.after),
+  before_cnt: numOrNull(c.beforeCnt), after_cnt: numOrNull(c.afterCnt),
   progress: Number(c.progress) || 0, reason: c.reason || "", note: c.note || "",
 });
 
@@ -86,8 +88,9 @@ const COLUMNS = [
 ];
 const STATUS_BORDER = { todo: "border-l-slate-300", doing: "border-l-blue-400", stuck: "border-l-red-400", done: "border-l-emerald-400" };
 
-const EMPTY = { title: "", cat: "보험", assignee: "", status: "todo", before: "", after: "", progress: 0, reason: "", note: "" };
+const EMPTY = { title: "", cat: "보험", assignee: "", status: "todo", before: "", after: "", beforeCnt: "", afterCnt: "", progress: 0, reason: "", note: "" };
 const isEff = (t) => t.before !== "" && t.after !== "" && !isNaN(t.before) && !isNaN(t.after);
+const isCnt = (t) => t.beforeCnt !== "" && t.afterCnt !== "" && !isNaN(t.beforeCnt) && !isNaN(t.afterCnt);
 const asgOf = (t) => t.assignee || "미지정";
 
 function Tag({ label, className }) {
@@ -96,6 +99,7 @@ function Tag({ label, className }) {
 
 function Card({ t, onDragStart, onClick, onDelete }) {
   const hasEff = isEff(t);
+  const hasCnt = isCnt(t);
   const pct = t.status === "done" ? 100 : (t.progress || 0);
   const barColor = t.status === "done" ? "bg-emerald-500" : t.status === "stuck" ? "bg-red-400" : "bg-blue-500";
   const st = t.status === "stuck"
@@ -131,13 +135,18 @@ function Card({ t, onDragStart, onClick, onDelete }) {
         <span className="w-8 shrink-0 text-right text-[10px] tabular-nums text-slate-400">{pct}%</span>
       </div>
 
-      {/* 5. 효율화 — 없으면 자리 유지 */}
-      <div className="mt-1.5 h-[15px] text-[12px] leading-none">
-        {hasEff ? (
-          <span><span className="text-slate-400 tabular-nums">{t.before}분</span><span className="mx-1 text-slate-300">→</span><span className="font-semibold text-emerald-600 tabular-nums">{t.after}분</span><span className="ml-1.5 text-[11px] text-emerald-600 tabular-nums">▼{t.before - t.after}분</span></span>
-        ) : (
-          <span className="text-slate-300">효율화 —</span>
-        )}
+      {/* 5. 효율화 — 시간/횟수 두 줄 (없으면 자리 유지) */}
+      <div className="mt-1.5 space-y-0.5 text-[12px] leading-tight">
+        <div className="h-[15px]">
+          {hasEff ? (
+            <span>⏱ <span className="text-slate-400 tabular-nums">{t.before}분</span><span className="mx-1 text-slate-300">→</span><span className="font-semibold text-emerald-600 tabular-nums">{t.after}분</span><span className="ml-1.5 text-[11px] text-emerald-600 tabular-nums">▼{t.before - t.after}분</span></span>
+          ) : (<span className="text-slate-300">⏱ —</span>)}
+        </div>
+        <div className="h-[15px]">
+          {hasCnt ? (
+            <span>🔁 <span className="text-slate-400 tabular-nums">{t.beforeCnt}번/건</span><span className="mx-1 text-slate-300">→</span><span className="font-semibold text-indigo-600 tabular-nums">{t.afterCnt}번/건</span><span className="ml-1.5 text-[11px] text-indigo-600 tabular-nums">▼{t.beforeCnt - t.afterCnt}</span></span>
+          ) : (<span className="text-slate-300">🔁 —</span>)}
+        </div>
       </div>
 
       {/* 6. 상태/막힘 — 한 줄 고정 */}
@@ -190,13 +199,21 @@ function Modal({ data, onChange, onSave, onClose, onDelete, saving }) {
           </div>
           <div><label className="mb-1 block text-[11px] font-medium text-slate-500">상태</label>
             <select className={field} value={data.status} onChange={(e) => set("status", e.target.value)}>{COLUMNS.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}</select></div>
-          <div className="rounded-lg bg-slate-50 p-2.5">
-            <label className="mb-1 block text-[11px] font-medium text-slate-500">효율화 (선택) — 보고용</label>
+          <div className="rounded-lg bg-slate-50 p-2.5 space-y-2">
+            <label className="block text-[11px] font-medium text-slate-500">효율화 (선택) — 보고용 · 1회 기준</label>
             <div className="flex items-center gap-2 text-[13px]">
-              <input className="w-20 rounded-lg border border-slate-200 px-2 py-1 text-center outline-none focus:border-slate-400" placeholder="전" type="number" value={data.before} onChange={(e) => set("before", e.target.value === "" ? "" : Number(e.target.value))} />
-              <span className="text-slate-400">분 →</span>
-              <input className="w-20 rounded-lg border border-slate-200 px-2 py-1 text-center outline-none focus:border-slate-400" placeholder="후" type="number" value={data.after} onChange={(e) => set("after", e.target.value === "" ? "" : Number(e.target.value))} />
+              <span className="w-12 shrink-0 text-[12px] text-slate-500">⏱ 시간</span>
+              <input className="w-16 rounded-lg border border-slate-200 px-2 py-1 text-center outline-none focus:border-slate-400" placeholder="전" type="number" value={data.before} onChange={(e) => set("before", e.target.value === "" ? "" : Number(e.target.value))} />
+              <span className="text-slate-400">→</span>
+              <input className="w-16 rounded-lg border border-slate-200 px-2 py-1 text-center outline-none focus:border-slate-400" placeholder="후" type="number" value={data.after} onChange={(e) => set("after", e.target.value === "" ? "" : Number(e.target.value))} />
               <span className="text-slate-400">분</span>
+            </div>
+            <div className="flex items-center gap-2 text-[13px]">
+              <span className="w-12 shrink-0 text-[12px] text-slate-500">🔁 횟수</span>
+              <input className="w-16 rounded-lg border border-slate-200 px-2 py-1 text-center outline-none focus:border-slate-400" placeholder="전" type="number" value={data.beforeCnt} onChange={(e) => set("beforeCnt", e.target.value === "" ? "" : Number(e.target.value))} />
+              <span className="text-slate-400">→</span>
+              <input className="w-16 rounded-lg border border-slate-200 px-2 py-1 text-center outline-none focus:border-slate-400" placeholder="후" type="number" value={data.afterCnt} onChange={(e) => set("afterCnt", e.target.value === "" ? "" : Number(e.target.value))} />
+              <span className="text-slate-400">번/건</span>
             </div>
           </div>
           {data.status !== "done" && (
@@ -289,8 +306,10 @@ function App() {
     const doing = filtered.filter((t) => t.status === "doing");
     const stuck = filtered.filter((t) => t.status === "stuck");
     const effDone = done.filter(isEff);
+    const cntDone = done.filter(isCnt);
     const totalSaved = effDone.reduce((s, t) => s + (t.before - t.after), 0);
-    return { done, doing, stuck, totalSaved, effCount: effDone.length };
+    const totalCnt = cntDone.reduce((s, t) => s + (t.beforeCnt - t.afterCnt), 0);
+    return { done, doing, stuck, totalSaved, totalCnt, effCount: effDone.length, cntCount: cntDone.length };
   }, [filtered]);
 
   const byCat = useMemo(() =>
@@ -298,7 +317,8 @@ function App() {
       const inCat = tasks.filter((t) => t.cat === c);
       const dn = inCat.filter((t) => t.status === "done");
       const saved = dn.filter(isEff).reduce((s, t) => s + (t.before - t.after), 0);
-      return { c, all: inCat.length, done: dn.length, saved };
+      const savedCnt = dn.filter(isCnt).reduce((s, t) => s + (t.beforeCnt - t.afterCnt), 0);
+      return { c, all: inCat.length, done: dn.length, saved, savedCnt };
     }).filter((x) => x.all > 0),
     [tasks]);
 
@@ -365,7 +385,20 @@ function App() {
       ) : (
       <React.Fragment>
         <div className="mb-4 grid grid-cols-4 gap-3">
-          <Kpi label={"총 절감 시간 (" + filterLabel + ")"} value={stats.totalSaved > 0 ? stats.totalSaved + "분" : "—"} sub={stats.totalSaved > 0 ? "효율화 " + stats.effCount + "건" : "완료 카드에 '후' 값 입력 시 집계"} accent="text-emerald-600" />
+          <div className="rounded-xl bg-white p-3.5 text-center shadow-sm ring-1 ring-inset ring-slate-200">
+            <div className="text-[11px] font-medium text-slate-500">총 절감 ({filterLabel})</div>
+            <div className="mt-1 flex items-center justify-center gap-3">
+              <div>
+                <div className="text-[18px] font-bold leading-none text-emerald-600 tabular-nums">{stats.totalSaved > 0 ? "▼" + stats.totalSaved : "—"}<span className="ml-0.5 text-[11px] font-medium">{stats.totalSaved > 0 ? "분" : ""}</span></div>
+                <div className="mt-1 text-[10px] text-slate-400">⏱ 시간 {stats.effCount}건</div>
+              </div>
+              <div className="h-7 w-px bg-slate-200"></div>
+              <div>
+                <div className="text-[18px] font-bold leading-none text-indigo-600 tabular-nums">{stats.totalCnt > 0 ? "▼" + stats.totalCnt : "—"}<span className="ml-0.5 text-[11px] font-medium">{stats.totalCnt > 0 ? "번/건" : ""}</span></div>
+                <div className="mt-1 text-[10px] text-slate-400">🔁 횟수 {stats.cntCount}건</div>
+              </div>
+            </div>
+          </div>
           <Kpi label="진행 중" value={stats.doing.length} accent="text-blue-600" />
           <Kpi label="🔴 막힘" value={stats.stuck.length} sub={stats.stuck.length ? "보드 '막힘' 컬럼에 사유" : "막힌 업무 없음"} accent="text-red-600" />
           <Kpi label="완료" value={stats.done.length} accent="text-emerald-600" />
@@ -412,7 +445,7 @@ function App() {
                   <div key={x.c}>
                     <div className="flex items-center justify-between text-[12px]">
                       <span className="font-semibold text-slate-700">{x.c}</span>
-                      <span className="tabular-nums text-slate-400">완료 {x.done}/{x.all}{x.saved > 0 && <span className="ml-1.5 font-semibold text-emerald-600">▼{x.saved}분</span>}</span>
+                      <span className="tabular-nums text-slate-400">완료 {x.done}/{x.all}{x.saved > 0 && <span className="ml-1.5 font-semibold text-emerald-600">▼{x.saved}분</span>}{x.savedCnt > 0 && <span className="ml-1.5 font-semibold text-indigo-600">▼{x.savedCnt}</span>}</span>
                     </div>
                     <div className="mt-1.5 h-2 w-full overflow-hidden rounded-full bg-slate-100">
                       <div className={"h-full rounded-full " + catBar(x.c)} style={{ width: (x.all ? (x.done / x.all) * 100 : 0) + "%" }}></div>
@@ -433,7 +466,9 @@ function App() {
                       <Tag label={t.cat} className={catColor(t.cat)} />
                       <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-slate-700">{t.title}</span>
                       <span className="shrink-0 text-[11px] text-slate-400">👤 {t.assignee || "—"}</span>
-                      {isEff(t) ? <span className="shrink-0 text-[11px] font-semibold text-emerald-600 tabular-nums">▼{t.before - t.after}분</span> : <span className="shrink-0 text-[11px] text-slate-300">—</span>}
+                      {isEff(t) ? <span className="shrink-0 text-[11px] font-semibold text-emerald-600 tabular-nums">▼{t.before - t.after}분</span> : null}
+                      {isCnt(t) ? <span className="shrink-0 text-[11px] font-semibold text-indigo-600 tabular-nums">▼{t.beforeCnt - t.afterCnt}</span> : null}
+                      {!isEff(t) && !isCnt(t) ? <span className="shrink-0 text-[11px] text-slate-300">—</span> : null}
                     </div>
                   ))}
                 </div>
