@@ -243,6 +243,60 @@ function Modal({ data, onChange, onSave, onClose, onDelete, saving }) {
   );
 }
 
+function CatAccordion({ items, onOpenCard }) {
+  const [open, setOpen] = useState({});
+  const toggle = (c) => setOpen((o) => ({ ...o, [c]: !o[c] }));
+  return (
+    <div className="rounded-xl bg-white p-4 shadow-sm ring-1 ring-inset ring-slate-200">
+      <div className="mb-3 text-[14px] font-bold text-slate-800">분류별 완료 성과 <span className="text-[11px] font-normal text-slate-400">(클릭해서 펼치기)</span></div>
+      {items.length === 0 ? (
+        <p className="py-3 text-center text-[12px] text-slate-300">데이터 없음</p>
+      ) : (
+        <div className="flex flex-col gap-2">
+          {items.map((x) => {
+            const isOpen = !!open[x.c];
+            return (
+              <div key={x.c} className="overflow-hidden rounded-lg ring-1 ring-inset ring-slate-100">
+                <button onClick={() => toggle(x.c)} className="flex w-full items-center gap-2 px-2.5 py-2 text-left hover:bg-slate-50">
+                  <span className={"shrink-0 text-[9px] text-slate-400 transition-transform " + (isOpen ? "rotate-90" : "")}>▶</span>
+                  <Tag label={x.c} className={catColor(x.c)} />
+                  <span className="text-[11px] tabular-nums text-slate-400">완료 {x.done}/{x.all}</span>
+                  <span className="ml-auto flex items-center gap-1.5 text-[11px] tabular-nums">
+                    {x.saved > 0 && <span className="font-semibold text-emerald-600">⏱▼{x.saved}</span>}
+                    {x.savedCnt > 0 && <span className="font-semibold text-indigo-600">🔁▼{x.savedCnt}</span>}
+                  </span>
+                </button>
+                <div className="px-2.5 pb-2">
+                  <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
+                    <div className={"h-full rounded-full " + catBar(x.c)} style={{ width: (x.all ? (x.done / x.all) * 100 : 0) + "%" }}></div>
+                  </div>
+                </div>
+                {isOpen && (
+                  <div className="border-t border-slate-100 bg-slate-50/40 px-2.5 py-2">
+                    {x.doneTasks.length === 0 ? (
+                      <p className="py-1 text-center text-[11px] text-slate-300">완료된 업무 없음</p>
+                    ) : (
+                      <div className="flex flex-col gap-0.5">
+                        {x.doneTasks.map((t) => (
+                          <button key={t.id} onClick={() => onOpenCard(t)} className="flex items-center gap-2 rounded-md px-1.5 py-1 text-left hover:bg-white">
+                            <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-slate-700">{t.title}</span>
+                            {isEff(t) && <span className="shrink-0 text-[11px] font-semibold text-emerald-600 tabular-nums">⏱▼{t.before - t.after}</span>}
+                            {isCnt(t) && <span className="shrink-0 text-[11px] font-semibold text-indigo-600 tabular-nums">🔁▼{t.beforeCnt - t.afterCnt}</span>}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function App() {
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -294,7 +348,6 @@ function App() {
     (active === "전체" || t.cat === active) &&
     (activeAsg === "전체" || asgOf(t) === activeAsg)
   ), [tasks, active, activeAsg]);
-  const doneFiltered = filtered.filter((t) => t.status === "done");
 
   const filterLabel = useMemo(() => {
     const parts = [active !== "전체" ? active : null, activeAsg !== "전체" ? activeAsg : null].filter(Boolean);
@@ -318,7 +371,7 @@ function App() {
       const dn = inCat.filter((t) => t.status === "done");
       const saved = dn.filter(isEff).reduce((s, t) => s + (t.before - t.after), 0);
       const savedCnt = dn.filter(isCnt).reduce((s, t) => s + (t.beforeCnt - t.afterCnt), 0);
-      return { c, all: inCat.length, done: dn.length, saved, savedCnt };
+      return { c, all: inCat.length, done: dn.length, saved, savedCnt, doneTasks: dn };
     }).filter((x) => x.all > 0),
     [tasks]);
 
@@ -438,42 +491,7 @@ function App() {
           </div>
 
           <div className="col-span-1 flex flex-col gap-3">
-            <div className="rounded-xl bg-white p-4 shadow-sm ring-1 ring-inset ring-slate-200">
-              <div className="mb-3 text-[14px] font-bold text-slate-800">분류별 현황 <span className="text-[11px] font-normal text-slate-400">(완료 · 효율화)</span></div>
-              <div className="flex flex-col gap-3.5">
-                {byCat.map((x) => (
-                  <div key={x.c}>
-                    <div className="flex items-center justify-between text-[12px]">
-                      <span className="font-semibold text-slate-700">{x.c}</span>
-                      <span className="tabular-nums text-slate-400">완료 {x.done}/{x.all}{x.saved > 0 && <span className="ml-1.5 font-semibold text-emerald-600">▼{x.saved}분</span>}{x.savedCnt > 0 && <span className="ml-1.5 font-semibold text-indigo-600">▼{x.savedCnt}</span>}</span>
-                    </div>
-                    <div className="mt-1.5 h-2 w-full overflow-hidden rounded-full bg-slate-100">
-                      <div className={"h-full rounded-full " + catBar(x.c)} style={{ width: (x.all ? (x.done / x.all) * 100 : 0) + "%" }}></div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="rounded-xl bg-white p-4 shadow-sm ring-1 ring-inset ring-slate-200">
-              <div className="mb-2.5 text-[14px] font-bold text-slate-800">✅ 완료 히스토리 <span className="text-[11px] font-normal text-slate-400">({doneFiltered.length})</span></div>
-              {doneFiltered.length === 0 ? (
-                <p className="py-3 text-center text-[12px] leading-relaxed text-slate-300">완료 업무가 여기 쌓여.<br/>카드를 '완료'로 옮기면 기록돼.</p>
-              ) : (
-                <div className="flex flex-col gap-1">
-                  {doneFiltered.map((t) => (
-                    <div key={t.id} className="flex items-center gap-2 rounded-lg p-2">
-                      <Tag label={t.cat} className={catColor(t.cat)} />
-                      <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-slate-700">{t.title}</span>
-                      <span className="shrink-0 text-[11px] text-slate-400">👤 {t.assignee || "—"}</span>
-                      {isEff(t) ? <span className="shrink-0 text-[11px] font-semibold text-emerald-600 tabular-nums">▼{t.before - t.after}분</span> : null}
-                      {isCnt(t) ? <span className="shrink-0 text-[11px] font-semibold text-indigo-600 tabular-nums">▼{t.beforeCnt - t.afterCnt}</span> : null}
-                      {!isEff(t) && !isCnt(t) ? <span className="shrink-0 text-[11px] text-slate-300">—</span> : null}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+            <CatAccordion items={byCat} onOpenCard={(t) => setModal({ ...t })} />
           </div>
         </div>
 
